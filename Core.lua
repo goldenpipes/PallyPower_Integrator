@@ -1,5 +1,5 @@
 -------------------------------------------------------------------------------
---  PallyPower Integration for EllesmereUI  (WoW Forever)
+--  PallyPower Integration  (WoW Forever)
 --
 --  Hover an EllesmereUI player, party or raid frame and:
 --    mouse wheel   picks the blessing for that player (your PallyPower

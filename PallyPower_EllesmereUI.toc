@@ -1,5 +1,5 @@
 ## Interface: 16001
-## Title: PallyPower Integration for EllesmereUI
+## Title: PallyPower Integration
 ## Notes: Pick and cast PallyPower blessings from EllesmereUI unit frames: hover, mouse wheel to pick, middle-click to cast.
 ## Author: goldenpipes
 ## Version: @project-version@

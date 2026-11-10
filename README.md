@@ -1,4 +1,4 @@
-# PallyPower Integration for EllesmereUI
+# PallyPower Integration
 
 WoW Forever addon that lets a paladin pick and cast PallyPower blessings straight from EllesmereUI unit frames.
 

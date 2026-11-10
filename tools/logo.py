@@ -1,4 +1,4 @@
-"""PallyPower Integrator logo: blessing tiles, a golden arrow, a unit frame.
+"""PallyPower Integration logo: blessing tiles, a golden arrow, a unit frame.
 Drawn at 4x and downscaled for clean edges.  usage: python logo.py out.png [size] [icon_dir]
 icon_dir holds the game icons as <name>.jpg (from wow.zamimg.com/images/wow/icons/large/);
 without it the tiles use drawn glyphs instead."""
