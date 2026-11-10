@@ -3,3 +3,5 @@ enable-nolib-creation: no
 
 ignore:
     - deploy.ps1
+    - media
+    - tools
