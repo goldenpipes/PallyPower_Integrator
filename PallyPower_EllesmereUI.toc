@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: PallyPower Integration for EllesmereUI
+## Notes: Pick and cast PallyPower blessings from EllesmereUI unit frames: hover, mouse wheel to pick, middle-click to cast.
+## Author: goldenpipes
+## Version: 1.0.0
+## Dependencies: PallyPower, EllesmereUI
+## OptionalDeps: EllesmereUIRaidFrames, EllesmereUIUnitFrames
+## SavedVariables: PallyPowerEUIDB
+## X-Category: Paladin
+
+Core.lua
+Skin.lua
+Options.lua
