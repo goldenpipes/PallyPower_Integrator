@@ -1,0 +1,5 @@
+package-as: PallyPower_EllesmereUI
+enable-nolib-creation: no
+
+ignore:
+    - deploy.ps1
