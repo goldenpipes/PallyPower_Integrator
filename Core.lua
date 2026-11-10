@@ -3,8 +3,10 @@
 --
 --  Hover an EllesmereUI player, party or raid frame and:
 --    mouse wheel   picks the blessing for that player (your PallyPower
---                  individual assignment, synced to the other paladins)
---    middle-click  casts the picked blessing on them
+--                  individual assignment, synced to the other paladins);
+--                  optionally with Shift, Ctrl or Alt held
+--    cast click    casts the picked blessing on them (middle-click by
+--                  default; button 4/5 or a modifier + click in the settings)
 --  An icon on the frame shows the pick and how long your blessing has left.
 --  Works in combat: the choices for every group member are prepared out of
 --  combat, and the wheel steps through them in secure code. Optionally hides
@@ -32,8 +34,11 @@ local SWIPE = "Interface\\AddOns\\EllesmereUI\\media\\white-square.png"
 --  Settings
 -------------------------------------------------------------------------------
 ns.DEFAULTS = {
-	enabled      = true,          -- hover, wheel and middle-click on EUI frames
+	enabled      = true,          -- hover, wheel and click-to-cast on EUI frames
 	hideBar      = true,          -- hide PallyPower's own buff bar
+	-- bindings
+	castButton   = "3",           -- key into ns.CAST_BUTTONS: [modifier-]mouse button
+	wheelMod     = "",            -- key into ns.WHEEL_MODS: modifier held while scrolling
 	-- visibility (EllesmereUI's visibility modes)
 	visibility   = "mouseover",   -- mouseover = only the frame under the mouse
 	hoverAlways  = true,          -- with a condition: the hovered frame shows its icon anyway
@@ -83,6 +88,26 @@ ns.ANCHOR_ORDER = {
 	"---", "OUT_RIGHT", "OUT_LEFT", "OUT_TOP", "OUT_BOTTOM",
 }
 
+-- The click that casts: "[modifier-]button", the prefix and suffix of the secure
+-- action attributes (shift-type1, spell3, ...). Plain left and right click stay
+-- with the unit frame (targeting, the menu), so those only come with a modifier.
+ns.CAST_BUTTONS = {
+	["3"] = "Middle Click", ["4"] = "Mouse Button 4", ["5"] = "Mouse Button 5",
+	["shift-1"] = "Shift + Left Click", ["ctrl-1"] = "Ctrl + Left Click", ["alt-1"] = "Alt + Left Click",
+	["shift-2"] = "Shift + Right Click", ["ctrl-2"] = "Ctrl + Right Click", ["alt-2"] = "Alt + Right Click",
+	["shift-3"] = "Shift + Middle Click", ["ctrl-3"] = "Ctrl + Middle Click", ["alt-3"] = "Alt + Middle Click",
+}
+ns.CAST_BUTTON_ORDER = {
+	"3", "4", "5", "---",
+	"shift-1", "ctrl-1", "alt-1", "---",
+	"shift-2", "ctrl-2", "alt-2", "---",
+	"shift-3", "ctrl-3", "alt-3",
+}
+
+-- Modifier held while scrolling; the prefix of the override binding key.
+ns.WHEEL_MODS = {[""] = "None", ["SHIFT-"] = "Shift", ["CTRL-"] = "Ctrl", ["ALT-"] = "Alt"}
+ns.WHEEL_MOD_ORDER = {"", "SHIFT-", "CTRL-", "ALT-"}
+
 ns.TEXT_POINTS = {
 	CENTER = "Center", TOP = "Top", BOTTOM = "Bottom", LEFT = "Left", RIGHT = "Right",
 	TOPLEFT = "Top left", TOPRIGHT = "Top right", BOTTOMLEFT = "Bottom left", BOTTOMRIGHT = "Bottom right",
@@ -110,6 +135,8 @@ function ns.DB()
 		end
 		if not ns.ANCHORS[db.anchor] then db.anchor = ns.DEFAULTS.anchor end
 		if not ns.TEXT_POINTS[db.cdTextPos] then db.cdTextPos = ns.DEFAULTS.cdTextPos end
+		if not ns.CAST_BUTTONS[db.castButton] then db.castButton = ns.DEFAULTS.castButton end
+		if not ns.WHEEL_MODS[db.wheelMod] then db.wheelMod = ns.DEFAULTS.wheelMod end
 	end
 	return db
 end
@@ -214,26 +241,33 @@ end
 --  Header attributes, per unit token u:
 --    n:u        number of choices      k:u    current choice (1..n)
 --    s:u:k      spell to cast for choice k
+--    pp-ta, pp-sa   the cast click's attribute names (e.g. type3 / spell3)
+--    pp-wm          modifier for the wheel bindings ("" or "SHIFT-" ...)
+--  Each frame we set a click on remembers its names in its own pp-ta / pp-sa,
+--  so a changed setting (or a frame that stops being ours) drops the old click.
 -------------------------------------------------------------------------------
 local ENTER = [[
 	local u = self:GetAttribute("unit")
 	local n = u and control:GetAttribute("pp-on") and control:GetAttribute("n:" .. u)
-	if not n then
-		-- not one of ours (pet, target, disabled): drop a middle-click we set earlier
-		if self:GetAttribute("pp-owned") then
-			self:SetAttribute("type3", nil)
-			self:SetAttribute("spell3", nil)
-			self:SetAttribute("pp-owned", nil)
-		end
-		return
+	local ta, sa = control:GetAttribute("pp-ta"), control:GetAttribute("pp-sa")
+	local ota, osa = self:GetAttribute("pp-ta"), self:GetAttribute("pp-sa")
+	if ota and (not n or ota ~= ta) then
+		self:SetAttribute(ota, nil)
+		if osa then self:SetAttribute(osa, nil) end
+		self:SetAttribute("pp-ta", nil)
+		self:SetAttribute("pp-sa", nil)
 	end
+	-- not one of ours (pet, target, disabled)
+	if not n or not ta then return end
 	pp_hover = self
 	local k = control:GetAttribute("k:" .. u) or 1
-	self:SetAttribute("pp-owned", true)
-	self:SetAttribute("type3", "spell")
-	self:SetAttribute("spell3", control:GetAttribute("s:" .. u .. ":" .. k))
-	control:SetBindingClick(true, "MOUSEWHEELUP", "]] .. WHEEL_BUTTON .. [[", "Up")
-	control:SetBindingClick(true, "MOUSEWHEELDOWN", "]] .. WHEEL_BUTTON .. [[", "Down")
+	self:SetAttribute("pp-ta", ta)
+	self:SetAttribute("pp-sa", sa)
+	self:SetAttribute(ta, "spell")
+	self:SetAttribute(sa, control:GetAttribute("s:" .. u .. ":" .. k))
+	local wm = control:GetAttribute("pp-wm") or ""
+	control:SetBindingClick(true, wm .. "MOUSEWHEELUP", "]] .. WHEEL_BUTTON .. [[", "Up")
+	control:SetBindingClick(true, wm .. "MOUSEWHEELDOWN", "]] .. WHEEL_BUTTON .. [[", "Down")
 ]]
 
 local LEAVE = [[
@@ -257,7 +291,8 @@ local WHEEL = [[
 	if button == "Up" then k = k - 1 else k = k + 1 end
 	if k < 1 then k = n elseif k > n then k = 1 end
 	control:SetAttribute("k:" .. u, k)
-	f:SetAttribute("spell3", control:GetAttribute("s:" .. u .. ":" .. k))
+	local sa = f:GetAttribute("pp-sa")
+	if sa then f:SetAttribute(sa, control:GetAttribute("s:" .. u .. ":" .. k)) end
 	return false
 ]]
 
@@ -552,6 +587,32 @@ local function ScanFrames()
 end
 
 -------------------------------------------------------------------------------
+--  The cast click on a frame (out of combat; the secure snippets do the same in combat)
+-------------------------------------------------------------------------------
+-- The setting's attribute names: "shift-3" -> "shift-type3", "shift-spell3".
+local function CastAttributes()
+	local mod, btn = tostring(ns.DB().castButton):match("^(%a*%-?)([1-5])$")
+	if not btn then mod, btn = "", "3" end
+	return mod .. "type" .. btn, mod .. "spell" .. btn
+end
+
+local function Disown(f)
+	local ta, sa = f:GetAttribute("pp-ta"), f:GetAttribute("pp-sa")
+	if ta then f:SetAttribute(ta, nil) end
+	if sa then f:SetAttribute(sa, nil) end
+	f:SetAttribute("pp-ta", nil)
+	f:SetAttribute("pp-sa", nil)
+end
+
+local function Own(f, ta, sa, spell)
+	if f:GetAttribute("pp-ta") ~= ta then Disown(f) end
+	f:SetAttribute("pp-ta", ta)
+	f:SetAttribute("pp-sa", sa)
+	f:SetAttribute(ta, "spell")
+	f:SetAttribute(sa, spell)
+end
+
+-------------------------------------------------------------------------------
 --  Refresh
 -------------------------------------------------------------------------------
 local function SetBarHidden()
@@ -598,21 +659,28 @@ local function Refresh()
 		ClearOverrideBindings(header)
 	end
 
-	-- Middle-click: set up on the frame being hovered right now; the enter
-	-- snippet does it for every other frame. Turned off cleanly when disabled.
+	-- The cast click: set up on the frame being hovered right now; the enter
+	-- snippet does it for every other frame. A frame that stops being ours, or
+	-- still has the click from before the setting changed, loses it.
+	local ta, sa = CastAttributes()
+	header:SetAttribute("pp-ta", ta)
+	header:SetAttribute("pp-sa", sa)
+	header:SetAttribute("pp-wm", ns.DB().wheelMod)
+	-- the hovered frame's wheel, re-bound with the current modifier
+	ClearOverrideBindings(header)
+	local hu = on and hoverFrame and hoverFrame:GetAttribute("unit")
+	if hu and cache[hu] then
+		local wm = ns.DB().wheelMod
+		SetOverrideBindingClick(header, true, wm .. "MOUSEWHEELUP", WHEEL_BUTTON, "Up")
+		SetOverrideBindingClick(header, true, wm .. "MOUSEWHEELDOWN", WHEEL_BUTTON, "Down")
+	end
 	for f in pairs(wrapped) do
 		local u = f:GetAttribute("unit")
 		local c = on and u and cache[u]
-		if c then
-			if f == hoverFrame then
-				f:SetAttribute("pp-owned", true)
-				f:SetAttribute("type3", "spell")
-				f:SetAttribute("spell3", c.list[c.k] and c.list[c.k].spell)
-			end
-		elseif f:GetAttribute("pp-owned") then
-			f:SetAttribute("type3", nil)
-			f:SetAttribute("spell3", nil)
-			f:SetAttribute("pp-owned", nil)
+		if c and f == hoverFrame then
+			Own(f, ta, sa, c.list[c.k] and c.list[c.k].spell)
+		elseif not c or (f:GetAttribute("pp-ta") and f:GetAttribute("pp-ta") ~= ta) then
+			Disown(f)
 		end
 	end
 

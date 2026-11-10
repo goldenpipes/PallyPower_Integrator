@@ -314,10 +314,21 @@ local function BuildPage(_, parent, yOffset)
 	_, h = W:SectionHeader(parent, "UNIT FRAMES", y); y = y - h
 	_, h = W:DualRow(parent, y,
 		{type = "toggle", text = "Blessings on Unit Frames", getValue = Get("enabled"), setValue = Set("enabled"),
-			tooltip = "Hover an EllesmereUI player, party or raid frame: the mouse wheel picks that player's blessing and middle-click casts it. Works in combat."},
+			tooltip = "Hover an EllesmereUI player, party or raid frame: the mouse wheel picks that player's blessing and the cast click casts it. Works in combat."},
 		{type = "toggle", text = "Hide PallyPower Bar", getValue = Get("hideBar"), setValue = Set("hideBar"),
 			disabled = Off("enabled"), disabledTooltip = "Blessings on Unit Frames is off.",
 			tooltip = "Hides PallyPower's own buff bar. /ppe assign, /pp blessings or a left-click on the minimap icon still open the assignment window."}); y = y - h
+
+	_, h = W:SectionHeader(parent, "BINDINGS", y); y = y - h
+	_, h = W:DualRow(parent, y,
+		{type = "dropdown", text = "Cast With", values = ns.CAST_BUTTONS, order = ns.CAST_BUTTON_ORDER,
+			getValue = Get("castButton"), setValue = Set("castButton"),
+			disabled = Off("enabled"), disabledTooltip = "Blessings on Unit Frames is off.",
+			tooltip = "The click on a hovered frame that casts its blessing. Plain left and right click stay with the frame (target and menu), so they're only offered with a modifier. Takes effect out of combat."},
+		{type = "dropdown", text = "Scroll With", values = ns.WHEEL_MODS, order = ns.WHEEL_MOD_ORDER,
+			getValue = Get("wheelMod"), setValue = Set("wheelMod"),
+			disabled = Off("enabled"), disabledTooltip = "Blessings on Unit Frames is off.",
+			tooltip = "A modifier to hold while scrolling to pick the blessing. With one set, plain scrolling over a frame still zooms the camera. Takes effect out of combat."}); y = y - h
 
 	_, h = W:SectionHeader(parent, "VISIBILITY", y); y = y - h
 	local hoverCfg = {type = "toggle", text = "Always Show on Hover", getValue = Get("hoverAlways"), setValue = Set("hoverAlways"),
