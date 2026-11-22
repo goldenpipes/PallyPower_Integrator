@@ -12,8 +12,11 @@ local issecretvalue = _G.issecretvalue or function() return false end
 
 local function OpenAssignments()
 	if EUI and EUI.IsShown and EUI:IsShown() then EUI:Hide() end
+	local panel = _G.DaylightUI and _G.DaylightUI.OptionsPanel
+	if panel and panel.IsShown and panel.Toggle and panel.IsShown() then pcall(panel.Toggle) end
 	if PallyPowerBlessings_Toggle then PallyPowerBlessings_Toggle() end
 end
+ns.OpenAssignments = OpenAssignments
 
 -------------------------------------------------------------------------------
 --  Preview: a copy of your EllesmereUI player frame (size, portrait, bars and
@@ -444,10 +447,11 @@ SlashCmdList.PALLYPOWEREUI = function(msg)
 		return
 	end
 	if InCombatLockdown() then
-		print("|cff00ccffPallyPower EUI:|r settings can't open in combat.")
+		print("|cff00ccffPallyPower Integration:|r settings can't open in combat.")
 		return
 	end
-	if not (EUI and EUI.OpenPlugin and EUI.OpenPlugin(PLUGIN_ID)) then
-		print("|cff00ccffPallyPower EUI:|r couldn't open the EllesmereUI settings panel.")
-	end
+	-- EllesmereUI's panel when it's here, else the page in DaylightUI's options (OptionsDaylight.lua)
+	if EUI and EUI.OpenPlugin and EUI.OpenPlugin(PLUGIN_ID) then return end
+	if ns.OpenDaylight and ns.OpenDaylight() then return end
+	print("|cff00ccffPallyPower Integration:|r couldn't open the settings: it needs EllesmereUI or DaylightUI.")
 end

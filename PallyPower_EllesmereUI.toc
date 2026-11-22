@@ -1,10 +1,10 @@
 ## Interface: 16001
 ## Title: PallyPower Integration
-## Notes: Pick and cast PallyPower blessings from EllesmereUI unit frames: hover, mouse wheel to pick, click to cast.
+## Notes: Pick and cast PallyPower blessings from EllesmereUI or DaylightUI unit frames: hover, mouse wheel to pick, click to cast.
 ## Author: goldenpipes
 ## Version: @project-version@
-## Dependencies: PallyPower, EllesmereUI
-## OptionalDeps: EllesmereUIRaidFrames, EllesmereUIUnitFrames
+## Dependencies: PallyPower
+## OptionalDeps: EllesmereUI, EllesmereUIRaidFrames, EllesmereUIUnitFrames, DaylightUI, DaylightUI_UnitFrames
 ## SavedVariables: PallyPowerEUIDB
 ## X-Category: Paladin
 ## X-Curse-Project-ID: 1795465
@@ -12,3 +12,4 @@
 Core.lua
 Skin.lua
 Options.lua
+OptionsDaylight.lua

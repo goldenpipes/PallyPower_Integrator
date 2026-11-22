@@ -1,7 +1,7 @@
 -------------------------------------------------------------------------------
 --  PallyPower Integration  (WoW Forever)
 --
---  Hover an EllesmereUI player, party or raid frame and:
+--  Hover an EllesmereUI or DaylightUI player, party or raid frame and:
 --    mouse wheel   picks the blessing for that player (your PallyPower
 --                  individual assignment, synced to the other paladins);
 --                  optionally with Shift, Ctrl or Alt held
@@ -12,10 +12,11 @@
 --  combat, and the wheel steps through them in secure code. Optionally hides
 --  PallyPower's own bar.
 --
---  Uses only PallyPower's public methods and saved assignment table, and finds
+--  Uses only PallyPower's public methods and saved assignment table. Finds
 --  EllesmereUI's frames through their group headers and the standard
---  ClickCastFrames table. Nothing in either addon is changed; PallyPower's
---  UpdateLayout/UpdateRoster get a post-hook so we know when to rebuild.
+--  ClickCastFrames table, and DaylightUI's through its public API
+--  (DaylightUI.API.Frames / FrameMade). Nothing in any of them is changed;
+--  PallyPower's UpdateLayout/UpdateRoster get a post-hook so we know when to rebuild.
 -------------------------------------------------------------------------------
 local ADDON, ns = ...
 local PP = PallyPower
@@ -28,13 +29,27 @@ local issecret = _G.issecretvalue or function() return false end
 local WHEEL_BUTTON = "PallyPowerEUIWheel"
 local NONE_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 local WHITE = "Interface\\Buttons\\WHITE8x8"
-local SWIPE = "Interface\\AddOns\\EllesmereUI\\media\\white-square.png"
+local EUI_SWIPE = "Interface\\AddOns\\EllesmereUI\\media\\white-square.png"
+
+local function IsLoaded(name)
+	return C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded(name) or false
+end
+
+-- Which unit frame suites are here. EllesmereUI's settings and visibility
+-- checklist are used when it's loaded; DaylightUI gets its own settings page.
+local function HasEUI() return type(EllesmereUI) == "table" end
+local function DUIAPI()
+	local DUI = _G.DaylightUI
+	local API = type(DUI) == "table" and DUI.API
+	return type(API) == "table" and API.major == 1 and API or nil
+end
+ns.HasEUI, ns.DUIAPI = HasEUI, DUIAPI
 
 -------------------------------------------------------------------------------
 --  Settings
 -------------------------------------------------------------------------------
 ns.DEFAULTS = {
-	enabled      = true,          -- hover, wheel and click-to-cast on EUI frames
+	enabled      = true,          -- hover, wheel and click-to-cast on unit frames
 	hideBar      = true,          -- hide PallyPower's own buff bar
 	-- bindings
 	castButton   = "3",           -- key into ns.CAST_BUTTONS: [modifier-]mouse button
@@ -160,9 +175,9 @@ local hoverFrame
 -------------------------------------------------------------------------------
 --  PallyPower access (public methods and its saved assignment table only)
 -------------------------------------------------------------------------------
-local function EUIFramesLoaded()
-	local loaded = C_AddOns and C_AddOns.IsAddOnLoaded
-	return loaded and (loaded("EllesmereUIRaidFrames") or loaded("EllesmereUIUnitFrames")) or false
+local function FramesLoaded()
+	return IsLoaded("EllesmereUIRaidFrames") or IsLoaded("EllesmereUIUnitFrames")
+		or (IsLoaded("DaylightUI_UnitFrames") and DUIAPI() ~= nil)
 end
 
 -- A paladin PallyPower is enabled for and has already scanned (CanBuff errors until then).
@@ -173,7 +188,7 @@ local function PallyReady()
 end
 
 local function Active()
-	return ns.DB().enabled and EUIFramesLoaded() and PallyReady()
+	return ns.DB().enabled and FramesLoaded() and PallyReady()
 end
 
 local function UnitInfo(unit)
@@ -308,14 +323,15 @@ function ns.NewIcon(parent)
 	o.cd:SetAllPoints(o.icon)
 	o.cd:SetDrawEdge(false)
 	o.cd:SetDrawBling(false)
-	pcall(o.cd.SetSwipeTexture, o.cd, SWIPE)
+	pcall(o.cd.SetSwipeTexture, o.cd, IsLoaded("EllesmereUI") and EUI_SWIPE or WHITE)
 	o:Hide()
 	return o
 end
 
--- The portrait EllesmereUI shows on a unit frame (player/target style frames), if any.
+-- The portrait shown on a unit frame (player/target style frames), if any:
+-- EllesmereUI keeps it as f.Portrait, DaylightUI as f.portrait.
 local function PortraitRegion(f)
-	local p = f.Portrait
+	local p = rawget(f, "Portrait") or rawget(f, "portrait")
 	local r = type(p) == "table" and (p.backdrop or p)
 	if type(r) == "table" and r.IsShown and r:IsShown() then
 		local w, h = r:GetSize()
@@ -323,10 +339,17 @@ local function PortraitRegion(f)
 	end
 end
 
-local function FontFor()
+-- The timer font: on a DaylightUI frame DaylightUI's font, otherwise EllesmereUI's.
+local duiFrames = {}    -- unit frame -> true for DaylightUI's
+local function FontFor(f)
+	local API = DUIAPI()
+	if API and (duiFrames[f] or not HasEUI()) then
+		local ok, path = pcall(API.Font)
+		if ok and type(path) == "string" then return path, "OUTLINE" end
+	end
 	local EUI = EllesmereUI
-	local path = EUI and EUI.GetFontPath and EUI.GetFontPath("EllesmereUIUnitFrames")
-	local flags = EUI and EUI.GetFontOutlineFlag and EUI.GetFontOutlineFlag("EllesmereUIUnitFrames")
+	local path = HasEUI() and EUI.GetFontPath and EUI.GetFontPath("EllesmereUIUnitFrames")
+	local flags = HasEUI() and EUI.GetFontOutlineFlag and EUI.GetFontOutlineFlag("EllesmereUIUnitFrames")
 	return path or STANDARD_TEXT_FONT, flags or "OUTLINE"
 end
 
@@ -398,7 +421,7 @@ function ns.PaintIcon(o, f, texture, usable, state, start, duration)
 		cd:SetHideCountdownNumbers(hideText)
 		local fs = cd.GetCountdownFontString and cd:GetCountdownFontString()
 		if fs then
-			local path, flags = FontFor()
+			local path, flags = FontFor(f)
 			fs:SetFont(path, d.cdTextSize or 10, flags)
 			if flags == "" then fs:SetShadowOffset(1, -1) else fs:SetShadowOffset(0, 0) end
 			local c = d.cdTextColor
@@ -422,6 +445,25 @@ end
 -- EllesmereUI's visibility checklist (Never / Always / Mouseover, match all or any,
 -- Show and Hide lanes per condition), evaluated the way EUI's own modules do it.
 -- Returns true (show), false (hide) or "mouseover" (show on the hovered frame only).
+-- Without EllesmereUI: one condition from ns.VIS_MODES.
+ns.VIS_MODES = {
+	never = "Never", always = "Always", mouseover = "Mouseover (hovered frame)",
+	in_combat = "In Combat", out_of_combat = "Out of Combat",
+	in_raid = "In Raid Group", in_party = "In Party", solo = "Solo",
+}
+ns.VIS_MODE_ORDER = {"mouseover", "always", "never", "in_combat", "out_of_combat", "in_raid", "in_party", "solo"}
+
+local function SimpleVerdict(mode, state)
+	if mode == "never" then return false end
+	if mode == "always" then return true end
+	if mode == "in_combat" then return state.inCombat end
+	if mode == "out_of_combat" then return not state.inCombat end
+	if mode == "in_raid" then return state.inRaid end
+	if mode == "in_party" then return state.inParty end
+	if mode == "solo" then return not (state.inRaid or state.inParty) end
+	return "mouseover"
+end
+
 local function Verdict(d)
 	local EUI = EllesmereUI
 	local state = {
@@ -429,6 +471,7 @@ local function Verdict(d)
 		inRaid = IsInRaid(),
 		inParty = IsInGroup() and not IsInRaid(),
 	}
+	if not HasEUI() then return SimpleVerdict(d.visibility, state) end
 	local ok, r = pcall(function()
 		if EUI.EvalVisibilityExtended then
 			if d.visibilityMatch ~= "any" and EUI.CheckVisibilityOptions
@@ -501,7 +544,7 @@ end
 --  Building each unit's choices (out of combat only)
 -------------------------------------------------------------------------------
 local function UnitTokens()
-	-- "player" always: the EUI player frame lets you bless yourself solo, in party and in raid
+	-- "player" always: the player frame lets you bless yourself solo, in party and in raid
 	local t = {"player"}
 	if IsInRaid() then
 		for i = 1, MAX_RAID_MEMBERS do t[#t + 1] = "raid" .. i end
@@ -550,7 +593,7 @@ local function ClearUnit(u)
 end
 
 -------------------------------------------------------------------------------
---  Finding the EllesmereUI unit frames
+--  Finding the EllesmereUI and DaylightUI unit frames
 -------------------------------------------------------------------------------
 local HEADERS = {"ERFPartyHeader", "ERFFlatHeader"}
 for g = 1, 8 do HEADERS[#HEADERS + 1] = "ERFGroupHeader" .. g end
@@ -566,7 +609,23 @@ local function Wrap(f)
 	wrapped[f] = true
 end
 
+-- DaylightUI's player frame (kind "unit" also covers target, focus...) and its
+-- party and raid tiles, through its public API.
+local function ScanDaylight()
+	local API = DUIAPI()
+	if not (API and type(API.Frames) == "function") then return end
+	for _, kind in ipairs({"unit", "party", "raid"}) do
+		for f, unit in API.Frames(kind) do
+			if kind ~= "unit" or unit == "player" then
+				Wrap(f)
+				if wrapped[f] then duiFrames[f] = true end
+			end
+		end
+	end
+end
+
 local function ScanFrames()
+	ScanDaylight()
 	-- EUI's own player frame, by name too, in case another addon owns ClickCastFrames
 	Wrap(_G.EllesmereUIUnitFrames_Player)
 	for _, hname in ipairs(HEADERS) do
@@ -766,8 +825,16 @@ local function Setup()
 		end
 	end)
 	-- target, zone, mount, resting and Party Mode edges for the visibility conditions
-	if EllesmereUI.RegisterVisibilityUpdater then
+	if HasEUI() and EllesmereUI.RegisterVisibilityUpdater then
 		EllesmereUI.RegisterVisibilityUpdater(QueueIcons)
+	end
+	-- DaylightUI makes its raid tiles as the group grows (some mid-fight): pick them
+	-- up. FrameMade also replays every frame made so far.
+	local API = DUIAPI()
+	if API and type(API.On) == "function" then
+		API.On("FrameMade", function(kind, _, _, isPreview)
+			if not isPreview and (kind == "unit" or kind == "party" or kind == "raid") then QueueRefresh() end
+		end, ADDON)
 	end
 	QueueRefresh()
 end
